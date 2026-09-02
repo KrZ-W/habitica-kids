@@ -39,10 +39,10 @@ git clone https://github.com/KrZ-W/habitica-kids.git
 cd habitica-kids
 cp config.example.json config.json   # then edit it
 node server.js
+```
 
 Then open **`http://<host>:3001/kids`** — the face picker. When `habiticaOrigin`
 is set, the real Habitica is served from `/` on the same port.
-```
 
 ### config.json
 

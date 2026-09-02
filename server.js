@@ -18,6 +18,7 @@
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
+const { sendMail } = require("./notify");
 
 const CONFIG_PATH = process.env.HK_CONFIG || path.join(__dirname, "config.json");
 const PUBLIC_DIR = path.join(__dirname, "public");
@@ -150,6 +151,68 @@ function buildAvatarLayers(prefs, gear) {
 }
 
 const memberById = async (id) => (await getMembers()).find((m) => m.userId === id);
+
+/* ---------- reward redemptions (webhook) ---------- */
+
+// Habitica fires a taskActivity/scored webhook when a reward is bought. We keep
+// a small rolling log so the parent can be told (mirror + email).
+const LOG_PATH = path.join(__dirname, "redemptions.json");
+let redemptions = [];
+try { redemptions = JSON.parse(fs.readFileSync(LOG_PATH, "utf8")); } catch (_) { redemptions = []; }
+const saveRedemptions = () => { try { fs.writeFileSync(LOG_PATH, JSON.stringify(redemptions.slice(0, 100), null, 2)); } catch (e) { console.error("[habitica-kids] cannot save redemptions:", e.message); } };
+
+async function recordRedemption(payload) {
+  const task = payload.task || {};
+  const who = (await getMembers()).find((m) => m.userId === (payload.user && payload.user._id));
+  const { icon, label } = splitEmoji(task.text || "");
+  const entry = {
+    at: new Date().toISOString(),
+    name: (who && who.name) || (payload.user && payload.user.profile && payload.user.profile.name) || "?",
+    icon, label,
+    cost: Math.round(task.value || 0),
+    goldLeft: Math.floor(((payload.user || {}).stats || {}).gp || 0)
+  };
+  redemptions.unshift(entry);
+  redemptions = redemptions.slice(0, 100);
+  saveRedemptions();
+  console.log(`[habitica-kids] redemption: ${entry.name} → ${entry.label} (${entry.cost} or)`);
+
+  if (config.notify && config.notify.email && config.notify.email.to) {
+    const when = new Date(entry.at).toLocaleString("fr-CA");
+    sendMail(config.notify.email,
+      `${entry.name} a échangé : ${entry.label}`,
+      `${entry.name} vient d'échanger une récompense.\n\n` +
+      `Récompense : ${entry.icon ? entry.icon + " " : ""}${entry.label}\n` +
+      `Coût       : ${entry.cost} or\n` +
+      `Or restant : ${entry.goldLeft}\n` +
+      `Quand      : ${when}\n`
+    ).catch((e) => console.error("[habitica-kids] email failed:", e.message));
+  }
+  return entry;
+}
+
+// Make sure every member has a webhook pointing back at us, so redemptions are
+// reported without any manual setup. Idempotent.
+async function ensureWebhooks() {
+  if (!config.webhookUrl) return;
+  for (const m of await getMembers()) {
+    try {
+      const existing = (await api("/user/webhook", m)).data || [];
+      const mine = existing.find((w) => w.url === config.webhookUrl);
+      if (mine) { if (mine.enabled) continue; await api(`/user/webhook/${mine.id}`, m, { method: "PUT", body: JSON.stringify({ enabled: true }) }); continue; }
+      await api("/user/webhook", m, {
+        method: "POST",
+        body: JSON.stringify({
+          url: config.webhookUrl, label: "habitica-kids", enabled: true, type: "taskActivity",
+          options: { created: false, updated: false, deleted: false, scored: true, checklistScored: false }
+        })
+      });
+      console.log(`[habitica-kids] webhook registered for ${m.name}`);
+    } catch (e) {
+      console.error(`[habitica-kids] webhook setup failed for ${m.name}: ${e.message}`);
+    }
+  }
+}
 
 /* ---------- chores ---------- */
 
@@ -332,6 +395,24 @@ const server = http.createServer(async (req, res) => {
         drop: describeDrop(d._tmp)
       });
     }
+    // Habitica webhook target (taskActivity/scored). We only care about rewards.
+    if (url.pathname === "/_hk/hook" && req.method === "POST") {
+      const body = await readBody(req);
+      if (body && body.type === "scored" && body.task && body.task.type === "reward" && body.direction === "up") {
+        await recordRedemption(body);
+      }
+      return sendJSON(res, 200, { ok: true });
+    }
+    if (url.pathname === "/_hk/redemptions") {
+      const limit = Math.min(parseInt(url.searchParams.get("limit") || "10", 10) || 10, 100);
+      const sinceH = parseFloat(url.searchParams.get("hours") || "0");
+      let list = redemptions;
+      if (sinceH > 0) {
+        const cut = Date.now() - sinceH * 3600e3;
+        list = list.filter((r) => Date.parse(r.at) >= cut);
+      }
+      return sendJSON(res, 200, { redemptions: list.slice(0, limit) });
+    }
     if (url.pathname === "/_hk/rewards") {
       const m = await memberById(url.searchParams.get("member"));
       if (!m) return sendJSON(res, 404, { error: "unknown member" });
@@ -383,4 +464,7 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(config.port, () => {
   console.log(`[habitica-kids] listening on :${config.port} → ${config.apiBase}`);
+  if (config.webhookUrl) {
+    ensureWebhooks().catch((e) => console.error("[habitica-kids] webhook setup:", e.message));
+  }
 });

@@ -19,5 +19,20 @@
   ],
   "hideMembers": [],
   "memberCacheSeconds": 45,
-  "habiticaOrigin": "http://localhost:3000"
+  "habiticaOrigin": "http://localhost:3000",
+  "webhookUrl": "http://<this-host>:3001/_hk/hook",
+  "notify": {
+    "email": {
+      "to": "parent@example.com",
+      "from": "habitica-kids@example.com",
+      "method": "sendmail",
+      "smtp": {
+        "host": "smtp.example.com",
+        "port": 587,
+        "user": "<user>",
+        "pass": "<password>",
+        "secure": false
+      }
+    }
+  }
 }

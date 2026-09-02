@@ -20,6 +20,9 @@ No logins, no account switching, works on any device with a browser.
 - **The family is discovered, not hardcoded.** Members come from your Habitica
   **party** (and/or accounts you list in the config), so adding a kid in Habitica
   adds them here.
+- **Live avatars.** Each face is that member's actual Habitica character,
+  composited from their current appearance and equipped gear — it changes as they
+  level up and equip things (refreshed every `memberCacheSeconds`).
 - **Pre-reader friendly.** A leading emoji in a task name (`🪥 Brosser ses dents`)
   becomes the tile's pictogram, so kids who can't read yet can still find their
   chores. Big touch targets, ⭐/🪙 burst and a "Bravo !" toast on completion.

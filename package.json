@@ -1,6 +1,6 @@
 {
   "name": "habitica-kids",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "A kid-friendly, multi-user web client for Habitica: tap your face, see today's chores as pictogram tiles, tap to complete. Works with self-hosted instances.",
   "main": "server.js",
   "scripts": { "start": "node server.js" },

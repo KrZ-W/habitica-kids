@@ -27,7 +27,7 @@
 
   async function loadPeople() {
     try {
-      const r = await fetch("/api/members");
+      const r = await fetch("/_hk/members");
       const { members } = await r.json();
       grid.innerHTML = "";
       if (!members || !members.length) {
@@ -50,6 +50,15 @@
         }
         b.onclick = () => openMember(m);
         grid.appendChild(b);
+
+        // second action: jump into the full Habitica app, already logged in as
+        // this member (rewards shop, equipment, pets, drops — the whole game)
+        const full = document.createElement("a");
+        full.className = "person-full";
+        full.href = "/open?member=" + encodeURIComponent(m.id);
+        full.textContent = "Habitica →";
+        full.onclick = (e) => e.stopPropagation();
+        b.appendChild(full);
       });
     } catch (e) {
       grid.innerHTML = '<p class="muted">Connexion impossible.</p>';
@@ -80,7 +89,7 @@
   async function loadChores() {
     if (!current) return;
     try {
-      const r = await fetch("/api/chores?member=" + encodeURIComponent(current.id));
+      const r = await fetch("/_hk/chores?member=" + encodeURIComponent(current.id));
       const { chores } = await r.json();
       render(chores || []);
     } catch (e) {
@@ -126,7 +135,7 @@
     btn.disabled = true;
     btn.classList.add("popping");
     try {
-      const r = await fetch("/api/complete", {
+      const r = await fetch("/_hk/complete", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ member: current.id, task: chore.id })

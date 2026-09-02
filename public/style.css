@@ -110,3 +110,16 @@ h1 { font-size: 30px; text-align: center; margin: 10px 0 26px; font-weight: 700;
 @media (prefers-reduced-motion: reduce) {
   .tile, .person, .spark, .tile.popping { transition: none; animation: none; }
 }
+
+/* second action on a face: open the full Habitica app as that member */
+.person-full {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--group);
+  text-decoration: none;
+  background: rgba(125, 178, 255, .12);
+  border: 1px solid rgba(125, 178, 255, .35);
+  padding: 5px 12px;
+  border-radius: 999px;
+}
+.person-full:active { background: rgba(125,178,255,.28); }

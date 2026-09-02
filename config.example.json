@@ -7,9 +7,17 @@
     "apiToken": "<that account's API token>"
   },
   "members": [
-    { "name": "Kid One", "userId": "<userId>", "apiToken": "<api token>" }
+    {
+      "name": "Kid One",
+      "userId": "<userId>",
+      "apiToken": "<api token>"
+    }
   ],
-  "order": ["Kid One", "Kid Two"],
+  "order": [
+    "Kid One",
+    "Kid Two"
+  ],
   "hideMembers": [],
-  "memberCacheSeconds": 300
+  "memberCacheSeconds": 300,
+  "habiticaOrigin": "http://localhost:3000"
 }

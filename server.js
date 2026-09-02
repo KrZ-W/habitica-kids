@@ -29,6 +29,10 @@ function loadConfig() {
   cfg.members = Array.isArray(cfg.members) ? cfg.members : [];
   cfg.memberTTL = (cfg.memberCacheSeconds != null ? cfg.memberCacheSeconds : 300) * 1000;
   cfg.hide = Array.isArray(cfg.hideMembers) ? cfg.hideMembers : [];
+  // When set, the real Habitica web app is proxied on this same origin so a
+  // member can be logged straight into it (see /open).
+  cfg.habiticaOrigin = cfg.habiticaOrigin || "";
+  cfg.proxyHabitica = !!cfg.habiticaOrigin;
   return cfg;
 }
 let config = loadConfig();
@@ -156,6 +160,38 @@ function splitEmoji(text) {
   return m ? { icon: m[1], label: m[2] || t } : { icon: null, label: t };
 }
 
+// Gold + the custom rewards this member can buy.
+async function getRewards(member) {
+  const [tasks, user] = await Promise.all([
+    api("/tasks/user?type=rewards", member),
+    api("/user?userFields=stats", member)
+  ]);
+  const gp = Math.floor((((user.data || {}).stats || {}).gp) || 0);
+  const rewards = (tasks.data || []).map((t) => {
+    const cost = Math.round(t.value || 0);
+    return { id: t.id || t._id, ...splitEmoji(t.text), cost, affordable: gp >= cost };
+  }).sort((a, b) => a.cost - b.cost);
+  return { gold: gp, rewards };
+}
+
+// Turn Habitica's drop payload into something a kid can read.
+function describeDrop(tmp) {
+  if (!tmp) return null;
+  const out = [];
+  if (tmp.drop && (tmp.drop.dialog || tmp.drop.text)) {
+    out.push(String(tmp.drop.dialog || tmp.drop.text));
+  }
+  const fd = tmp.firstDrops;
+  if (fd) {
+    const pretty = (s) => String(s).replace(/([a-z])([A-Z])/g, "$1 $2");
+    if (fd.egg) out.push(`🥚 Œuf : ${pretty(fd.egg)}`);
+    if (fd.hatchingPotion) out.push(`🧪 Potion : ${pretty(fd.hatchingPotion)}`);
+    if (fd.food) out.push(`🍖 Nourriture : ${pretty(fd.food)}`);
+    if (fd.quest) out.push(`📜 Quête : ${pretty(fd.quest)}`);
+  }
+  return out.length ? out.join(" · ") : null;
+}
+
 async function getChores(member) {
   const j = await api("/tasks/user", member);
   const tasks = j.data || [];
@@ -192,6 +228,31 @@ async function getChores(member) {
 
 const MIME = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "application/javascript; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon" };
 
+// Reverse-proxy the real Habitica web app so it shares this origin. That's what
+// makes "log this kid in and open the full app" possible: localStorage (where
+// the web client keeps its session) is per-origin.
+function proxy(req, res) {
+  const target = new URL(config.habiticaOrigin);
+  const opts = {
+    protocol: target.protocol,
+    hostname: target.hostname,
+    port: target.port || (target.protocol === "https:" ? 443 : 80),
+    method: req.method,
+    path: req.url,
+    headers: { ...req.headers, host: target.host }
+  };
+  const mod = target.protocol === "https:" ? require("https") : http;
+  const up = mod.request(opts, (r) => {
+    res.writeHead(r.statusCode, r.headers);
+    r.pipe(res);
+  });
+  up.on("error", (e) => {
+    if (!res.headersSent) res.writeHead(502, { "content-type": "text/plain" });
+    res.end("upstream unavailable: " + e.message);
+  });
+  req.pipe(up);
+}
+
 function sendJSON(res, code, obj) {
   const body = JSON.stringify(obj);
   res.writeHead(code, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
@@ -216,25 +277,70 @@ const readBody = (req) => new Promise((resolve) => {
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");
   try {
-    if (url.pathname === "/api/members") {
+    if (url.pathname === "/_hk/members") {
       const list = await getMembers(url.searchParams.get("refresh") === "1");
       // never expose tokens to the browser
       return sendJSON(res, 200, { members: list.map((m) => ({ id: m.userId, name: m.name, avatar: m.avatar, lvl: m.lvl })) });
     }
-    if (url.pathname === "/api/chores") {
+    if (url.pathname === "/_hk/chores") {
       const m = await memberById(url.searchParams.get("member"));
       if (!m) return sendJSON(res, 404, { error: "unknown member" });
       return sendJSON(res, 200, { chores: await getChores(m) });
     }
-    if (url.pathname === "/api/complete" && req.method === "POST") {
+    if (url.pathname === "/_hk/complete" && req.method === "POST") {
       const body = await readBody(req);
       const m = await memberById(body.member);
       if (!m || !body.task) return sendJSON(res, 400, { error: "member and task required" });
       const j = await api(`/tasks/${body.task}/score/up`, m, { method: "POST" });
       const d = (j && j.data) || {};
-      return sendJSON(res, 200, { ok: true, lvl: d.lvl, exp: d.exp, gp: d.gp, drop: (d._tmp && d._tmp.drop) || null });
+      const delta = d.delta != null ? Math.round(d.delta * 10) / 10 : null;
+      return sendJSON(res, 200, {
+        ok: true, lvl: d.lvl, exp: d.exp, gp: Math.floor(d.gp || 0), delta,
+        drop: describeDrop(d._tmp)
+      });
     }
-    if (url.pathname.startsWith("/api/")) return sendJSON(res, 404, { error: "not found" });
+    if (url.pathname === "/_hk/rewards") {
+      const m = await memberById(url.searchParams.get("member"));
+      if (!m) return sendJSON(res, 404, { error: "unknown member" });
+      return sendJSON(res, 200, await getRewards(m));
+    }
+    if (url.pathname === "/_hk/buy" && req.method === "POST") {
+      const body = await readBody(req);
+      const m = await memberById(body.member);
+      if (!m || !body.reward) return sendJSON(res, 400, { error: "member and reward required" });
+      try {
+        await api(`/tasks/${body.reward}/score/up`, m, { method: "POST" });
+      } catch (e) {
+        // Habitica refuses when there isn't enough gold
+        if (/gold|or\b|afford|assez/i.test(e.message)) return sendJSON(res, 200, { ok: false, reason: "not_enough_gold" });
+        throw e;
+      }
+      const after = await getRewards(m);
+      return sendJSON(res, 200, { ok: true, gold: after.gold });
+    }
+    // Hand off to the full Habitica web UI, already logged in as this member.
+    // Only possible when Habitica is reachable on this same origin (see the
+    // reverse proxy below) — localStorage is per-origin.
+    if (url.pathname === "/open") {
+      const m = await memberById(url.searchParams.get("member"));
+      if (!m) { res.writeHead(404); return res.end("unknown member"); }
+      const session = JSON.stringify({ auth: { apiId: m.userId, apiToken: m.apiToken } });
+      const html = `<!doctype html><meta charset="utf-8"><title>Ouverture…</title>
+<body style="background:#141c2b;color:#f2f5fa;font:18px system-ui;display:grid;place-items:center;height:100vh;margin:0">
+<p>Ouverture de Habitica…</p>
+<script>
+  localStorage.setItem('habit-mobile-settings', ${JSON.stringify(session)});
+  location.replace('/');
+</script></body>`;
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+      return res.end(html);
+    }
+    if (url.pathname.startsWith("/_hk/")) return sendJSON(res, 404, { error: "not found" });
+    // Our own UI lives under /kids; everything else is the real Habitica.
+    if (url.pathname === "/kids" || url.pathname.startsWith("/kids/")) {
+      return serveStatic(req, res, url.pathname.replace(/^\/kids\/?/, "/") || "/");
+    }
+    if (config.proxyHabitica) return proxy(req, res);
     return serveStatic(req, res, url.pathname);
   } catch (err) {
     console.error("[habitica-kids]", err.message);

@@ -4,7 +4,9 @@ A tiny, **kid-friendly web client for [Habitica](https://habitica.com)** — bui
 family tablet on the fridge.
 
 Tap your face → see today's chores as big pictogram tiles → tap one to complete it.
-No logins, no RPG menus, works on any device with a browser.
+Or tap **Habitica →** on a face to jump into the *full* Habitica web app **already
+logged in as that person** — rewards shop, equipment, pets, drops and all.
+No logins, no account switching, works on any device with a browser.
 
 > **Why it exists.** The official Habitica apps are single-account: switching
 > between family members means logging out and back in. They also show the full
@@ -23,6 +25,10 @@ No logins, no RPG menus, works on any device with a browser.
   chores. Big touch targets, ⭐/🪙 burst and a "Bravo !" toast on completion.
 - **Personal + household chores.** Shows a member's due Dailies and To-Dos, plus
   any **group/party chores** assigned to them (🏠).
+- **Launcher into the real app.** Set `habiticaOrigin` and this also reverse-proxies
+  your Habitica on the same origin, so a tap can write that member's session and
+  open the complete web client as them. Everything the simple view doesn't cover
+  (buying rewards, equipment, pets, item drops) is one tap away — no reimplementation.
 - **Self-host friendly.** Point `apiBase` at your own Habitica instance.
 - **No dependencies.** Node 18+ and the standard library. One file, ~250 lines.
 
@@ -32,7 +38,10 @@ No logins, no RPG menus, works on any device with a browser.
 git clone https://github.com/KrZ-W/habitica-kids.git
 cd habitica-kids
 cp config.example.json config.json   # then edit it
-node server.js                       # http://localhost:3001
+node server.js
+
+Then open **`http://<host>:3001/kids`** — the face picker. When `habiticaOrigin`
+is set, the real Habitica is served from `/` on the same port.
 ```
 
 ### config.json
@@ -41,6 +50,8 @@ node server.js                       # http://localhost:3001
 {
   "port": 3001,
   "apiBase": "http://localhost:3000/api/v3",  // or https://habitica.com/api/v3
+  "habiticaOrigin": "http://localhost:3000",   // optional: proxy the real web app
+                                               // here, enabling the "Habitica →" launcher
   "party": {                                   // optional: discover the family
     "id": "<group id>",
     "userId": "<a manager's userId>",

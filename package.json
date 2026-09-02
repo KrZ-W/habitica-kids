@@ -1,12 +1,32 @@
 {
   "name": "habitica-kids",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "A kid-friendly, multi-user web client for Habitica: tap your face, see today's chores as pictogram tiles, tap to complete. Works with self-hosted instances.",
   "main": "server.js",
-  "scripts": { "start": "node server.js" },
-  "keywords": ["habitica", "kids", "family", "chores", "self-hosted", "tablet"],
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [
+    "agent",
+    "chores",
+    "cli",
+    "family",
+    "habitica",
+    "kids",
+    "mcp",
+    "self-hosted",
+    "tablet"
+  ],
   "author": "KrZ-W",
   "license": "MIT",
-  "engines": { "node": ">=18" },
-  "repository": { "type": "git", "url": "git+https://github.com/KrZ-W/habitica-kids.git" }
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KrZ-W/habitica-kids.git"
+  },
+  "bin": {
+    "chores": "bin/chores.js"
+  }
 }

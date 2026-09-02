@@ -100,6 +100,45 @@ WantedBy=multi-user.target
 
 On a tablet, open the URL and **Add to Home Screen** for a full-screen app.
 
+## Managing chores with an AI agent (or the command line)
+
+Two front-ends over the same core, so a person, a script, or an assistant can
+add / change / remove chores.
+
+### CLI
+
+```bash
+node bin/chores.js list --who felix
+node bin/chores.js add "🧹 Ranger sa chambre" --who arthur --difficulty medium --days mon,wed
+node bin/chores.js add "🛏️ Faire son lit" --everyone --except Alex
+node bin/chores.js update "Ranger" --who arthur --difficulty hard --days weekdays
+node bin/chores.js remove "Ranger" --who arthur
+node bin/chores.js house add "🍽️ Vider le lave-vaisselle" --days daily --assign felix,emile
+```
+
+`--days` takes `mon,wed,fri`, `weekdays`, `weekend` or `daily` (French names work
+too). Add `--json` for machine-readable output — handy when an agent shells out.
+
+### MCP server
+
+`mcp-server.js` exposes the same operations as typed tools
+(`list_chores`, `add_chore`, `update_chore`, `remove_chore`,
+`list_house_chores`, `add_house_chore`, `remove_house_chore`), so an MCP-capable
+assistant can manage chores conversationally:
+
+```bash
+claude mcp add chores -- node /path/to/habitica-kids/mcp-server.js
+```
+
+…then just ask: *"add a medium chore for Arthur to tidy his room on Mondays and
+Wednesdays"*. No dependencies — plain JSON-RPC over stdio.
+
+### Siri / Apple Shortcuts
+
+Because it's all HTTP underneath, a Shortcut with **Get Contents of URL** against
+this server turns into a voice command (*"Dis Siri, ajouter une tâche"*). Works on
+your LAN; put the server behind a domain + HTTPS to use it away from home.
+
 ## Security
 
 API tokens live only in `config.json` (git-ignored) and are used server-side; the

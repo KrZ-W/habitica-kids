@@ -159,6 +159,13 @@ const memberById = async (id) => (await getMembers()).find((m) => m.userId === i
 const LOG_PATH = path.join(__dirname, "redemptions.json");
 let redemptions = [];
 try { redemptions = JSON.parse(fs.readFileSync(LOG_PATH, "utf8")); } catch (_) { redemptions = []; }
+// backfill entries written before ids/fulfilled existed
+let _migrated = false;
+for (const r of redemptions) {
+  if (!r.id) { r.id = Math.random().toString(36).slice(2, 10) + Date.parse(r.at || Date.now()).toString(36); _migrated = true; }
+  if (r.fulfilled === undefined) { r.fulfilled = false; _migrated = true; }
+}
+if (_migrated) setImmediate(() => saveRedemptions());
 const saveRedemptions = () => { try { fs.writeFileSync(LOG_PATH, JSON.stringify(redemptions.slice(0, 100), null, 2)); } catch (e) { console.error("[habitica-kids] cannot save redemptions:", e.message); } };
 
 async function recordRedemption(payload) {
@@ -166,6 +173,8 @@ async function recordRedemption(payload) {
   const who = (await getMembers()).find((m) => m.userId === (payload.user && payload.user._id));
   const { icon, label } = splitEmoji(task.text || "");
   const entry = {
+    id: Math.random().toString(36).slice(2, 10) + Date.now().toString(36),
+    fulfilled: false,
     at: new Date().toISOString(),
     name: (who && who.name) || (payload.user && payload.user.profile && payload.user.profile.name) || "?",
     icon, label,
@@ -407,11 +416,23 @@ const server = http.createServer(async (req, res) => {
       const limit = Math.min(parseInt(url.searchParams.get("limit") || "10", 10) || 10, 100);
       const sinceH = parseFloat(url.searchParams.get("hours") || "0");
       let list = redemptions;
+      // default view is what still has to be handed over
+      if (url.searchParams.get("pending") !== "0") list = list.filter((r) => !r.fulfilled);
       if (sinceH > 0) {
         const cut = Date.now() - sinceH * 3600e3;
         list = list.filter((r) => Date.parse(r.at) >= cut);
       }
       return sendJSON(res, 200, { redemptions: list.slice(0, limit) });
+    }
+    // mark a redemption as handed over (or undo)
+    if (url.pathname === "/_hk/fulfill" && req.method === "POST") {
+      const body = await readBody(req);
+      const r = redemptions.find((x) => x.id === body.id);
+      if (!r) return sendJSON(res, 404, { error: "unknown redemption" });
+      r.fulfilled = body.undo ? false : true;
+      r.fulfilledAt = r.fulfilled ? new Date().toISOString() : null;
+      saveRedemptions();
+      return sendJSON(res, 200, { ok: true, id: r.id, fulfilled: r.fulfilled });
     }
     if (url.pathname === "/_hk/rewards") {
       const m = await memberById(url.searchParams.get("member"));

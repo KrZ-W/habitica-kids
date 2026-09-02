@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#141c2b">
+<title>Récompenses à remettre</title>
+<link rel="stylesheet" href="/kids/style.css">
+<style>
+  .rd-wrap { max-width: 720px; margin: 0 auto; }
+  .rd { display: flex; align-items: center; gap: 14px; background: var(--bg2);
+        border-radius: 18px; padding: 14px 16px; margin-bottom: 12px; }
+  .rd-icon { font-size: 38px; line-height: 1; }
+  .rd-main { flex: 1 1 auto; min-width: 0; }
+  .rd-who { font-size: 19px; font-weight: 700; }
+  .rd-what { font-size: 16px; color: var(--muted); }
+  .rd-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .rd-do { background: #2a7d46; color: #fff; border: none; border-radius: 999px;
+           padding: 12px 18px; font: 600 16px system-ui; cursor: pointer; }
+  .rd-do:active { transform: scale(.96); }
+  .rd.done { opacity: .5; }
+  .rd-undo { background: none; border: 1px solid rgba(255,255,255,.3); color: var(--muted);
+             border-radius: 999px; padding: 9px 14px; font: 500 14px system-ui; cursor: pointer; }
+  .tabs { display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; }
+  .tab { background: var(--bg2); color: var(--muted); border: 1px solid transparent;
+         border-radius: 999px; padding: 9px 18px; font: 600 15px system-ui; cursor: pointer; }
+  .tab.on { color: var(--fg); border-color: var(--accent); }
+</style>
+</head>
+<body>
+<section class="screen rd-wrap">
+  <h1>🎁 Récompenses</h1>
+  <div class="tabs">
+    <button class="tab on" data-view="pending">À remettre</button>
+    <button class="tab" data-view="all">Historique</button>
+  </div>
+  <div id="list"><p class="muted">Chargement…</p></div>
+</section>
+<div id="toast" class="toast hidden"></div>
+
+<script>
+(() => {
+  const list = document.getElementById("list");
+  let view = "pending";
+
+  const toast = (m) => {
+    const t = document.getElementById("toast");
+    t.textContent = m; t.classList.remove("hidden");
+    clearTimeout(t._h); t._h = setTimeout(() => t.classList.add("hidden"), 2200);
+  };
+
+  async function load() {
+    const q = view === "pending" ? "pending=1&limit=50" : "pending=0&limit=50";
+    const r = await fetch("/_hk/redemptions?" + q);
+    const { redemptions } = await r.json();
+    list.innerHTML = "";
+    if (!redemptions.length) {
+      list.innerHTML = '<p class="muted">' +
+        (view === "pending" ? "Rien à remettre. 👍" : "Aucune récompense échangée.") + "</p>";
+      return;
+    }
+    redemptions.forEach((r) => {
+      const row = document.createElement("div");
+      row.className = "rd" + (r.fulfilled ? " done" : "");
+      const ic = document.createElement("div");
+      ic.className = "rd-icon"; ic.textContent = r.icon || "🎁";
+      const main = document.createElement("div");
+      main.className = "rd-main";
+      const who = document.createElement("div");
+      who.className = "rd-who"; who.textContent = r.name;
+      const what = document.createElement("div");
+      what.className = "rd-what"; what.textContent = r.label;
+      const meta = document.createElement("div");
+      meta.className = "rd-meta";
+      meta.textContent = `${r.cost} or · ${new Date(r.at).toLocaleString("fr-CA")}` +
+        (r.fulfilled && r.fulfilledAt ? " · remis" : "");
+      main.append(who, what, meta);
+      const btn = document.createElement("button");
+      if (r.fulfilled) {
+        btn.className = "rd-undo"; btn.textContent = "Annuler";
+        btn.onclick = () => mark(r.id, true);
+      } else {
+        btn.className = "rd-do"; btn.textContent = "✓ Remis";
+        btn.onclick = () => mark(r.id, false);
+      }
+      row.append(ic, main, btn);
+      list.appendChild(row);
+    });
+  }
+
+  async function mark(id, undo) {
+    const r = await fetch("/_hk/fulfill", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id, undo })
+    });
+    if (r.ok) { toast(undo ? "Remis dans la liste" : "Marqué comme remis ✓"); load(); }
+    else toast("Oups");
+  }
+
+  document.querySelectorAll(".tab").forEach((t) => {
+    t.onclick = () => {
+      document.querySelectorAll(".tab").forEach((x) => x.classList.remove("on"));
+      t.classList.add("on"); view = t.dataset.view; load();
+    };
+  });
+
+  load();
+  setInterval(load, 30000);
+})();
+</script>
+</body>
+</html>

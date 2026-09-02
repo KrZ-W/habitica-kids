@@ -34,6 +34,11 @@ No logins, no account switching, works on any device with a browser.
   (buying rewards, equipment, pets, item drops) is one tap away — no reimplementation.
   A floating **← Retour** button is injected into those pages so kids can get back
   to the picker without browser chrome (disable with `"backButton": false`).
+- **Know when a reward is cashed in.** Registers a Habitica webhook per member,
+  so redeeming a reward is logged (who / what / cost / gold left), optionally
+  emailed, and exposed at `/_hk/redemptions` for other displays. A parent page at
+  **`/kids/parent.html`** lists what still has to be handed over — tap *✓ Remis*
+  and it clears everywhere.
 - **Self-host friendly.** Point `apiBase` at your own Habitica instance.
 - **No dependencies.** Node 18+ and the standard library. One file, ~250 lines.
 

@@ -32,6 +32,8 @@ function loadConfig() {
   cfg.hide = Array.isArray(cfg.hideMembers) ? cfg.hideMembers : [];
   // When set, the real Habitica web app is proxied on this same origin so a
   // member can be logged straight into it (see /open).
+  cfg.parentPin = cfg.parentPin ? String(cfg.parentPin) : "";   // gate the parent page
+  cfg.parentSessionMinutes = cfg.parentSessionMinutes || 30;
   cfg.habiticaOrigin = cfg.habiticaOrigin || "";
   cfg.proxyHabitica = !!cfg.habiticaOrigin;
   return cfg;
@@ -296,6 +298,24 @@ async function getChores(member) {
   return chores;
 }
 
+/* ---------- parent access (short PIN) ---------- */
+
+const parentSessions = new Map(); // token -> expiry
+function newParentSession() {
+  const t = require("crypto").randomBytes(18).toString("hex");
+  parentSessions.set(t, Date.now() + config.parentSessionMinutes * 60000);
+  return t;
+}
+function isParent(req) {
+  if (!config.parentPin) return true; // no PIN configured => open
+  const m = /(?:^|;\s*)hk_parent=([a-f0-9]+)/.exec(req.headers.cookie || "");
+  if (!m) return false;
+  const exp = parentSessions.get(m[1]);
+  if (!exp) return false;
+  if (exp < Date.now()) { parentSessions.delete(m[1]); return false; }
+  return true;
+}
+
 /* ---------- http ---------- */
 
 const MIME = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "application/javascript; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon" };
@@ -418,14 +438,31 @@ const server = http.createServer(async (req, res) => {
       let list = redemptions;
       // default view is what still has to be handed over
       if (url.searchParams.get("pending") !== "0") list = list.filter((r) => !r.fulfilled);
+      else if (!isParent(req)) return sendJSON(res, 403, { error: "parent only" });
       if (sinceH > 0) {
         const cut = Date.now() - sinceH * 3600e3;
         list = list.filter((r) => Date.parse(r.at) >= cut);
       }
       return sendJSON(res, 200, { redemptions: list.slice(0, limit) });
     }
+    if (url.pathname === "/_hk/parent-check") {
+      return sendJSON(res, 200, { ok: isParent(req), pinRequired: !!config.parentPin });
+    }
+    if (url.pathname === "/_hk/parent-login" && req.method === "POST") {
+      const body = await readBody(req);
+      if (!config.parentPin || String(body.pin || "") !== config.parentPin) {
+        return sendJSON(res, 401, { ok: false });
+      }
+      const t = newParentSession();
+      res.writeHead(200, {
+        "content-type": "application/json",
+        "set-cookie": `hk_parent=${t}; Path=/; Max-Age=${config.parentSessionMinutes * 60}; HttpOnly; SameSite=Lax`
+      });
+      return res.end(JSON.stringify({ ok: true }));
+    }
     // mark a redemption as handed over (or undo)
     if (url.pathname === "/_hk/fulfill" && req.method === "POST") {
+      if (!isParent(req)) return sendJSON(res, 403, { error: "parent only" });
       const body = await readBody(req);
       const r = redemptions.find((x) => x.id === body.id);
       if (!r) return sendJSON(res, 404, { error: "unknown redemption" });
@@ -472,6 +509,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (url.pathname.startsWith("/_hk/")) return sendJSON(res, 404, { error: "not found" });
     // Our own UI lives under /kids; everything else is the real Habitica.
+    if (url.pathname === "/kids/parent.html" && !isParent(req)) {
+      return serveStatic(req, res, "/parent-login.html");
+    }
     if (url.pathname === "/kids" || url.pathname.startsWith("/kids/")) {
       return serveStatic(req, res, url.pathname.replace(/^\/kids\/?/, "/") || "/");
     }

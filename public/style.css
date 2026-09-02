@@ -123,3 +123,11 @@ h1 { font-size: 30px; text-align: center; margin: 10px 0 26px; font-weight: 700;
   border-radius: 999px;
 }
 .person-full:active { background: rgba(125,178,255,.28); }
+
+/* discreet parent access on the face picker */
+#parent-link {
+  position: fixed; right: 14px; bottom: 12px;
+  font-size: 20px; text-decoration: none; opacity: .35;
+  padding: 8px 10px; border-radius: 999px;
+}
+#parent-link:active { opacity: 1; background: rgba(255,255,255,.08); }

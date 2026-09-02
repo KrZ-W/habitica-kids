@@ -72,6 +72,8 @@ is set, the real Habitica is served from `/` on the same port.
   ],
   "order": ["Kid One", "Kid Two"],             // optional display order
   "hideMembers": [],                           // names/ids to leave off the picker
+  "parentPin": "1234",                         // gates the parent page (blank = no gate)
+  "parentSessionMinutes": 30,
   "memberCacheSeconds": 300
 }
 ```
@@ -101,9 +103,9 @@ On a tablet, open the URL and **Add to Home Screen** for a full-screen app.
 ## Security
 
 API tokens live only in `config.json` (git-ignored) and are used server-side; the
-browser only ever sees names, avatars and chore text. **There is no
+browser only ever sees names, avatars and chore text. Chore completion has **no
 authentication** — anyone who can reach the page can complete chores as any
-listed member. That's the point (kids shouldn't need passwords), so **keep it on
+listed member (only the parent page is PIN-gated). That's the point (kids shouldn't need passwords), so **keep it on
 your LAN**, not the public internet.
 
 ## License

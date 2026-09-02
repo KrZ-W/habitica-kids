@@ -34,5 +34,7 @@
         "secure": false
       }
     }
-  }
+  },
+  "parentPin": "1234",
+  "parentSessionMinutes": 30
 }

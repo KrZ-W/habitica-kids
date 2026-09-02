@@ -231,18 +231,51 @@ const MIME = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=u
 // Reverse-proxy the real Habitica web app so it shares this origin. That's what
 // makes "log this kid in and open the full app" possible: localStorage (where
 // the web client keeps its session) is per-origin.
+// A floating "back to the face picker" button, injected into proxied pages so
+// kids can get out of the full Habitica app without a browser chrome/back key
+// (there is none in kiosk / home-screen mode).
+const BACK_BUTTON = `
+<style>
+#hk-back{position:fixed;left:14px;bottom:14px;z-index:2147483647;
+  background:#1d283c;color:#f2f5fa;font:600 16px system-ui,sans-serif;
+  border:1px solid rgba(255,255,255,.25);border-radius:999px;padding:11px 18px;
+  text-decoration:none;box-shadow:0 4px 14px rgba(0,0,0,.45);opacity:.92}
+#hk-back:active{transform:scale(.96)}
+@media print{#hk-back{display:none}}
+</style>
+<a id="hk-back" href="/kids">← Retour</a>`;
+
 function proxy(req, res) {
   const target = new URL(config.habiticaOrigin);
+  const headers = { ...req.headers, host: target.host };
+  delete headers["accept-encoding"]; // so we can inject into HTML responses
   const opts = {
     protocol: target.protocol,
     hostname: target.hostname,
     port: target.port || (target.protocol === "https:" ? 443 : 80),
     method: req.method,
     path: req.url,
-    headers: { ...req.headers, host: target.host }
+    headers
   };
   const mod = target.protocol === "https:" ? require("https") : http;
   const up = mod.request(opts, (r) => {
+    const type = String(r.headers["content-type"] || "");
+    if (config.backButton !== false && /text\/html/i.test(type)) {
+      const chunks = [];
+      r.on("data", (c) => chunks.push(c));
+      r.on("end", () => {
+        let body = Buffer.concat(chunks).toString("utf8");
+        body = body.includes("</body>")
+          ? body.replace("</body>", BACK_BUTTON + "</body>")
+          : body + BACK_BUTTON;
+        const h = { ...r.headers };
+        delete h["content-length"];
+        delete h["content-encoding"];
+        res.writeHead(r.statusCode, h);
+        res.end(body);
+      });
+      return;
+    }
     res.writeHead(r.statusCode, r.headers);
     r.pipe(res);
   });

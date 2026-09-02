@@ -32,6 +32,8 @@ No logins, no account switching, works on any device with a browser.
   your Habitica on the same origin, so a tap can write that member's session and
   open the complete web client as them. Everything the simple view doesn't cover
   (buying rewards, equipment, pets, item drops) is one tap away — no reimplementation.
+  A floating **← Retour** button is injected into those pages so kids can get back
+  to the picker without browser chrome (disable with `"backButton": false`).
 - **Self-host friendly.** Point `apiBase` at your own Habitica instance.
 - **No dependencies.** Node 18+ and the standard library. One file, ~250 lines.
 

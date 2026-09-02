@@ -1,0 +1,15 @@
+{
+  "port": 3001,
+  "apiBase": "http://localhost:3000/api/v3",
+  "party": {
+    "id": "<party/group id — members are discovered from here>",
+    "userId": "<a manager account userId>",
+    "apiToken": "<that account's API token>"
+  },
+  "members": [
+    { "name": "Kid One", "userId": "<userId>", "apiToken": "<api token>" }
+  ],
+  "order": ["Kid One", "Kid Two"],
+  "hideMembers": [],
+  "memberCacheSeconds": 300
+}

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#141c2b">
+<title>Mes tâches</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- who's using it -->
+<section id="people" class="screen">
+  <h1>Qui es-tu&nbsp;?</h1>
+  <div id="people-grid" class="people-grid"><p class="muted">Chargement…</p></div>
+</section>
+
+<!-- that person's chores -->
+<section id="chores" class="screen hidden">
+  <header class="bar">
+    <button id="back" class="back" aria-label="Retour">←</button>
+    <div class="who"><span id="who-avatar" class="avatar sm"></span><h2 id="who-name"></h2></div>
+    <div id="progress" class="progress"></div>
+  </header>
+  <div id="chore-grid" class="chore-grid"></div>
+  <p id="all-done" class="all-done hidden">Tout est fait&nbsp;! 🎉</p>
+</section>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

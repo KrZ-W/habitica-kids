@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#141c2b">
+<title>Gérer les tâches</title>
+<link rel="stylesheet" href="/kids/style.css">
+<style>
+  .wrap { max-width: 760px; margin: 0 auto; }
+  .tabs { display: flex; gap: 10px; justify-content: center; margin-bottom: 18px; flex-wrap: wrap; }
+  .tab { background: var(--bg2); color: var(--muted); border: 1px solid transparent;
+         border-radius: 999px; padding: 9px 18px; font: 600 15px system-ui; cursor: pointer; }
+  .tab.on { color: var(--fg); border-color: var(--accent); }
+
+  .panel { background: var(--bg2); border-radius: 18px; padding: 16px; margin-bottom: 18px; }
+  .panel h2 { margin: 0 0 12px; font-size: 17px; }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+  input[type=text], select {
+    width: 100%; background: #0f1626; color: var(--fg); border: 1px solid rgba(255,255,255,.15);
+    border-radius: 12px; padding: 12px 14px; font: 16px system-ui;
+  }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .row > * { flex: 1 1 140px; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+  .chip { background: #0f1626; color: var(--muted); border: 1px solid rgba(255,255,255,.15);
+          border-radius: 999px; padding: 8px 12px; font: 500 14px system-ui; cursor: pointer; }
+  .chip.on { background: var(--accent); color: #1a1a1a; border-color: var(--accent); font-weight: 700; }
+  .btn { background: #2a7d46; color: #fff; border: none; border-radius: 999px;
+         padding: 13px 20px; font: 700 16px system-ui; cursor: pointer; width: 100%; margin-top: 14px; }
+  .btn:active { transform: scale(.98); }
+  .btn.sec { background: #33405a; }
+
+  .person { margin-bottom: 6px; }
+  .person h3 { font-size: 15px; text-transform: uppercase; letter-spacing: 1px;
+               color: var(--fg); margin: 16px 0 6px; border-bottom: 1px solid rgba(255,255,255,.15); padding-bottom: 4px; }
+  .task { display: flex; align-items: center; gap: 10px; padding: 9px 4px; border-bottom: 1px solid rgba(255,255,255,.06); }
+  .task .t { flex: 1 1 auto; min-width: 0; }
+  .task .meta { font-size: 12px; color: var(--muted); }
+  .icon-btn { background: none; border: none; color: var(--muted); font-size: 19px; cursor: pointer; padding: 6px 8px; }
+  .icon-btn:active { color: var(--fg); }
+  .done { opacity: .5; text-decoration: line-through; }
+</style>
+</head>
+<body>
+<section class="screen wrap">
+  <h1>🧹 Gérer les tâches</h1>
+  <div class="tabs">
+    <button class="tab on" data-tab="add">＋ Nouvelle</button>
+    <button class="tab" data-tab="list">Liste</button>
+    <a class="tab" href="/kids/parent.html">🎁 Récompenses</a>
+    <a class="tab" href="/kids">← Visages</a>
+  </div>
+
+  <!-- add -->
+  <div id="pane-add" class="panel">
+    <h2>Ajouter une tâche</h2>
+    <label>Tâche (commence par un emoji pour les petits)</label>
+    <input type="text" id="text" placeholder="🧹 Ranger sa chambre">
+    <div class="row">
+      <div>
+        <label>Pour qui</label>
+        <select id="who"></select>
+      </div>
+      <div>
+        <label>Difficulté</label>
+        <select id="difficulty">
+          <option value="trivial">Triviale</option>
+          <option value="easy" selected>Facile</option>
+          <option value="medium">Moyenne</option>
+          <option value="hard">Difficile</option>
+        </select>
+      </div>
+    </div>
+    <label>Jours (aucun = tous les jours)</label>
+    <div class="chips" id="days"></div>
+    <button class="btn" id="addBtn">Ajouter</button>
+  </div>
+
+  <!-- list -->
+  <div id="pane-list" class="panel hidden">
+    <h2>Tâches existantes</h2>
+    <div id="list"><p class="muted">Chargement…</p></div>
+  </div>
+</section>
+<div id="toast" class="toast hidden"></div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const DAYS = [["m","Lun"],["t","Mar"],["w","Mer"],["th","Jeu"],["f","Ven"],["s","Sam"],["su","Dim"]];
+  let people = [];
+  const chosen = new Set();
+
+  const toast = (m) => { const t=$("toast"); t.textContent=m; t.classList.remove("hidden");
+    clearTimeout(t._h); t._h=setTimeout(()=>t.classList.add("hidden"),2400); };
+
+  DAYS.forEach(([code,label]) => {
+    const b=document.createElement("button");
+    b.className="chip"; b.textContent=label;
+    b.onclick=()=>{ chosen.has(code)?chosen.delete(code):chosen.add(code); b.classList.toggle("on"); };
+    $("days").appendChild(b);
+  });
+
+  async function loadPeople() {
+    const { people: p } = await (await fetch("/_hk/manage/people")).json();
+    people = p;
+    $("who").innerHTML = "";
+    const opts = [["__all__","👨‍👩‍👧‍👦 Tout le monde"],["__house__","🏠 Tâche de maison (partagée)"]]
+      .concat(p.map(n=>[n,n]));
+    for (const [v,l] of opts) { const o=document.createElement("option"); o.value=v; o.textContent=l; $("who").appendChild(o); }
+  }
+
+  $("addBtn").onclick = async () => {
+    const text = $("text").value.trim();
+    if (!text) return toast("Écris la tâche");
+    const who = $("who").value;
+    const body = { text, difficulty: $("difficulty").value, days: [...chosen].join(",") || undefined };
+    if (who === "__all__") body.everyone = true;
+    else if (who === "__house__") body.house = true;
+    else body.who = who;
+    const r = await fetch("/_hk/manage/add", { method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify(body) });
+    const j = await r.json();
+    if (!r.ok) return toast("Oups : " + (j.error||""));
+    toast("Ajouté ✓");
+    $("text").value = ""; chosen.clear();
+    document.querySelectorAll("#days .chip").forEach(c=>c.classList.remove("on"));
+    if (!$("pane-list").classList.contains("hidden")) loadList();
+  };
+
+  async function loadList() {
+    const el = $("list"); el.innerHTML = '<p class="muted">Chargement…</p>';
+    const r = await fetch("/_hk/manage/chores");
+    const { chores, house } = await r.json();
+    el.innerHTML = "";
+    const byPerson = {};
+    (chores||[]).forEach(c => { (byPerson[c.person] = byPerson[c.person] || []).push(c); });
+
+    const section = (title, items, isHouse) => {
+      const d=document.createElement("div"); d.className="person";
+      const h=document.createElement("h3"); h.textContent=title; d.appendChild(h);
+      if (!items.length) { const p=document.createElement("p"); p.className="muted"; p.textContent="—"; d.appendChild(p); }
+      items.forEach(c => {
+        const row=document.createElement("div"); row.className="task";
+        const t=document.createElement("div"); t.className="t"+(c.completed?" done":"");
+        t.innerHTML = "";
+        const name=document.createElement("div"); name.textContent=c.text; t.appendChild(name);
+        const meta=document.createElement("div"); meta.className="meta";
+        meta.textContent=[c.difficulty, c.days||"tous les jours", isHouse&&c.assigned?("→ "+c.assigned.join(", ")):""].filter(Boolean).join(" · ");
+        t.appendChild(meta); row.appendChild(t);
+        const del=document.createElement("button"); del.className="icon-btn"; del.textContent="🗑"; del.title="Supprimer";
+        del.onclick=async()=>{
+          if(!confirm("Supprimer « "+c.text+" » ?")) return;
+          const body = isHouse ? { house:true, task:c.id } : { who:c.person, task:c.id };
+          const rr=await fetch("/_hk/manage/remove",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});
+          if(rr.ok){toast("Supprimé");loadList();} else toast("Oups");
+        };
+        row.appendChild(del);
+        d.appendChild(row);
+      });
+      el.appendChild(d);
+    };
+    if (house && house.length) section("🏠 Maison (partagées)", house, true);
+    Object.keys(byPerson).forEach(n => section(n, byPerson[n], false));
+  }
+
+  document.querySelectorAll(".tab[data-tab]").forEach(t => {
+    t.onclick = () => {
+      document.querySelectorAll(".tab[data-tab]").forEach(x=>x.classList.remove("on"));
+      t.classList.add("on");
+      const add = t.dataset.tab === "add";
+      $("pane-add").classList.toggle("hidden", !add);
+      $("pane-list").classList.toggle("hidden", add);
+      if (!add) loadList();
+    };
+  });
+
+  loadPeople();
+})();
+</script>
+</body>
+</html>

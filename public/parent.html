@@ -33,6 +33,7 @@
   <div class="tabs">
     <button class="tab on" data-view="pending">À remettre</button>
     <button class="tab" data-view="all">Historique</button>
+    <a class="tab" href="/kids/manage.html" style="text-decoration:none">🧹 Tâches</a>
   </div>
   <div id="list"><p class="muted">Chargement…</p></div>
 </section>
@@ -97,9 +98,9 @@
     else toast("Oups");
   }
 
-  document.querySelectorAll(".tab").forEach((t) => {
+  document.querySelectorAll(".tab[data-view]").forEach((t) => {
     t.onclick = () => {
-      document.querySelectorAll(".tab").forEach((x) => x.classList.remove("on"));
+      document.querySelectorAll(".tab[data-view]").forEach((x) => x.classList.remove("on"));
       t.classList.add("on"); view = t.dataset.view; load();
     };
   });

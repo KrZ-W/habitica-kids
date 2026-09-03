@@ -559,6 +559,41 @@ const server = http.createServer(async (req, res) => {
         return say("Désolé : " + e.message, 400);
       }
     }
+    // --- parent chore management (PIN-gated) ---
+    if (url.pathname.startsWith("/_hk/manage/")) {
+      if (!isParent(req)) return sendJSON(res, 403, { error: "parent only" });
+      const chores = CH.loadConfig(CONFIG_PATH);
+      const body = req.method === "POST" ? await readBody(req) : {};
+      const op = url.pathname.slice("/_hk/manage/".length);
+      try {
+        if (op === "people") {
+          return sendJSON(res, 200, { people: chores.members.map((m) => m.name) });
+        }
+        if (op === "chores") {
+          const type = url.searchParams.get("type") || "daily";
+          const [personal, house] = await Promise.all([
+            CH.listChores(chores, { type, includeCompleted: true }),
+            (chores.party && chores.party.id) ? CH.listHouseChores(chores).catch(() => []) : []
+          ]);
+          return sendJSON(res, 200, { chores: personal, house });
+        }
+        if (op === "add" && req.method === "POST") {
+          if (body.house) return sendJSON(res, 200, await CH.addHouseChore(chores, { text: body.text, difficulty: body.difficulty, days: body.days, assignTo: body.assignTo }));
+          if (body.everyone) return sendJSON(res, 200, { added: await CH.addChoreForAll(chores, body) });
+          return sendJSON(res, 200, await CH.addChore(chores, body));
+        }
+        if (op === "update" && req.method === "POST") {
+          return sendJSON(res, 200, await CH.updateChore(chores, body));
+        }
+        if (op === "remove" && req.method === "POST") {
+          if (body.house) return sendJSON(res, 200, await CH.removeHouseChore(chores, { task: body.task }));
+          return sendJSON(res, 200, await CH.removeChore(chores, body));
+        }
+        return sendJSON(res, 404, { error: "unknown operation" });
+      } catch (e) {
+        return sendJSON(res, 400, { error: e.message });
+      }
+    }
     if (url.pathname === "/_hk/parent-check") {
       return sendJSON(res, 200, { ok: isParent(req), pinRequired: !!config.parentPin });
     }
@@ -623,7 +658,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (url.pathname.startsWith("/_hk/")) return sendJSON(res, 404, { error: "not found" });
     // Our own UI lives under /kids; everything else is the real Habitica.
-    if (url.pathname === "/kids/parent.html" && !isParent(req)) {
+    if ((url.pathname === "/kids/manage.html" || url.pathname === "/kids/parent.html") && !isParent(req)) {
       return serveStatic(req, res, "/parent-login.html");
     }
     if (url.pathname === "/kids" || url.pathname.startsWith("/kids/")) {

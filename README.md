@@ -39,6 +39,11 @@ No logins, no account switching, works on any device with a browser.
   emailed, and exposed at `/_hk/redemptions` for other displays. A parent page at
   **`/kids/parent.html`** lists what still has to be handed over — tap *✓ Remis*
   and it clears everywhere.
+- **A parent page for managing chores** — `/kids/manage.html` (behind the same
+  PIN): add a chore for one person, everyone, or the household; pick difficulty
+  and repeat days with taps; list and delete. No Habitica logins, no per-account
+  switching, nothing to install — so a second parent can manage chores from a
+  phone.
 - **Shared chores that are first-come, first-served** (`exclusiveGroupChores`).
   Habitica gives every assignee their own copy of a group task, so several kids
   can each complete — and each be rewarded for — the same household chore. When

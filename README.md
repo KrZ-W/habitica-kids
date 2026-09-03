@@ -50,6 +50,11 @@ No logins, no account switching, works on any device with a browser.
   one member completes it, this unassigns the others, so it **disappears from
   their lists**; only the person who did it keeps the XP and gold. It's put back
   up for grabs at the next day rollover.
+- **Automatic day rollover** (`autoRollover`). Habitica only resets a member's
+  dailies when a *client* triggers their day rollover (its "cron"); if nobody opens
+  the official app, yesterday's checkmarks just stay. This server checks every
+  10 minutes and triggers `POST /cron` for any member whose day has turned, using
+  their own timezone and custom day start — so the mirror shows *today*.
 - **Self-host friendly.** Point `apiBase` at your own Habitica instance.
 - **No dependencies.** Node 18+ and the standard library. One file, ~250 lines.
 
@@ -84,6 +89,7 @@ is set, the real Habitica is served from `/` on the same port.
   "order": ["Kid One", "Kid Two"],             // optional display order
   "hideMembers": [],                           // names/ids to leave off the picker
   "exclusiveGroupChores": true,                // shared chores: first to finish wins
+  "autoRollover": true,                        // trigger each member's day rollover
   "parentPin": "1234",                         // gates the parent page (blank = no gate)
   "parentSessionMinutes": 30,
   "memberCacheSeconds": 300

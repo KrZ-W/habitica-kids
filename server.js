@@ -38,6 +38,9 @@ function loadConfig() {
   // "first come, first served" household chores: when one member completes a
   // shared group chore, it disappears for everyone else until the next day.
   cfg.exclusiveGroupChores = cfg.exclusiveGroupChores !== false;
+  // Habitica only rolls a member's day over (resets dailies, "cron") when a
+  // client triggers it. Nobody opens the official client daily here, so do it.
+  cfg.autoRollover = cfg.autoRollover !== false;
   cfg.parentPin = cfg.parentPin ? String(cfg.parentPin) : "";   // gate the parent page
   cfg.parentSessionMinutes = cfg.parentSessionMinutes || 30;
   cfg.habiticaOrigin = cfg.habiticaOrigin || "";
@@ -349,6 +352,30 @@ async function restoreClaims() {
     delete claims[taskId];
   }
   saveClaims();
+}
+
+/* ---------- daily rollover (Habitica "cron") ---------- */
+
+// Which local calendar day a timestamp falls in for this user (their timezone
+// offset in minutes, and their custom day-start hour).
+function localDayKey(ms, tzOffsetMin, dayStartHour) {
+  const shifted = new Date(ms - (tzOffsetMin || 0) * 60000 - (dayStartHour || 0) * 3600000);
+  return shifted.toISOString().slice(0, 10);
+}
+
+async function rolloverDays() {
+  for (const m of await getMembers()) {
+    try {
+      const d = (await api("/user?userFields=lastCron,preferences", m)).data || {};
+      const p = d.preferences || {};
+      const last = Date.parse(d.lastCron || 0);
+      if (localDayKey(last, p.timezoneOffset, p.dayStart) === localDayKey(Date.now(), p.timezoneOffset, p.dayStart)) continue;
+      await api("/cron", m, { method: "POST" });
+      console.log(`[habitica-kids] rolled ${m.name}'s day over (last cron ${d.lastCron})`);
+    } catch (e) {
+      console.error(`[habitica-kids] rollover failed for ${m.name}: ${e.message}`);
+    }
+  }
 }
 
 /* ---------- parent access (short PIN) ---------- */
@@ -677,9 +704,11 @@ server.listen(config.port, () => {
   if (config.webhookUrl) {
     ensureWebhooks().catch((e) => console.error("[habitica-kids] webhook setup:", e.message));
   }
-  if (config.exclusiveGroupChores) {
-    const tick = () => restoreClaims().catch((e) => console.error("[habitica-kids] restore:", e.message));
-    tick();                       // catch up if we were down over a day boundary
-    setInterval(tick, 10 * 60000); // and check every 10 minutes
-  }
+  const tick = async () => {
+    // order matters: roll days over first, then put shared chores back up
+    if (config.autoRollover) await rolloverDays().catch((e) => console.error("[habitica-kids] rollover:", e.message));
+    if (config.exclusiveGroupChores) await restoreClaims().catch((e) => console.error("[habitica-kids] restore:", e.message));
+  };
+  tick();                        // catch up if we were down over a day boundary
+  setInterval(tick, 10 * 60000); // and check every 10 minutes
 });

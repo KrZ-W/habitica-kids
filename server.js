@@ -35,6 +35,9 @@ function loadConfig() {
   // When set, the real Habitica web app is proxied on this same origin so a
   // member can be logged straight into it (see /open).
   cfg.shortcutToken = cfg.shortcutToken || "";  // shared secret for Siri Shortcuts
+  // "first come, first served" household chores: when one member completes a
+  // shared group chore, it disappears for everyone else until the next day.
+  cfg.exclusiveGroupChores = cfg.exclusiveGroupChores !== false;
   cfg.parentPin = cfg.parentPin ? String(cfg.parentPin) : "";   // gate the parent page
   cfg.parentSessionMinutes = cfg.parentSessionMinutes || 30;
   cfg.habiticaOrigin = cfg.habiticaOrigin || "";
@@ -301,6 +304,53 @@ async function getChores(member) {
   return chores;
 }
 
+/* ---------- exclusive (first-come-first-served) household chores ---------- */
+
+const CLAIM_PATH = path.join(__dirname, "claims.json");
+let claims = {};   // groupTaskId -> { assigned: [userId], by: name, day: "YYYY-MM-DD" }
+try { claims = JSON.parse(fs.readFileSync(CLAIM_PATH, "utf8")); } catch (_) { claims = {}; }
+const saveClaims = () => { try { fs.writeFileSync(CLAIM_PATH, JSON.stringify(claims, null, 2)); } catch (e) { console.error("[habitica-kids] cannot save claims:", e.message); } };
+const today = () => new Date().toLocaleDateString("en-CA"); // local YYYY-MM-DD
+
+const partyCred = () => (config.party && config.party.userId && config.party.apiToken)
+  ? { userId: config.party.userId, apiToken: config.party.apiToken } : null;
+
+// Someone completed a shared chore: take it off everyone else's list.
+async function claimGroupChore(taskId, winnerId, winnerName) {
+  const cred = partyCred();
+  if (!cred) return;
+  const task = (await api(`/tasks/${taskId}`, cred)).data || {};
+  const assigned = ((task.group || {}).assignedUsers || []).slice();
+  const others = assigned.filter((u) => u !== winnerId);
+  if (!others.length) return;
+
+  claims[taskId] = { assigned, by: winnerName || winnerId, day: today() };
+  saveClaims();
+  for (const uid of others) {
+    try { await api(`/tasks/${taskId}/unassign/${uid}`, cred, { method: "POST" }); }
+    catch (e) { console.error(`[habitica-kids] unassign ${uid} failed: ${e.message}`); }
+  }
+  console.log(`[habitica-kids] "${task.text}" claimed by ${winnerName} — removed for ${others.length} other(s)`);
+}
+
+// New day: put shared chores back up for grabs.
+async function restoreClaims() {
+  const cred = partyCred();
+  if (!cred) return;
+  const d = today();
+  for (const [taskId, c] of Object.entries(claims)) {
+    if (c.day === d) continue; // still the same day — leave it claimed
+    try {
+      await api(`/tasks/${taskId}/assign`, cred, { method: "POST", body: JSON.stringify(c.assigned) });
+      console.log(`[habitica-kids] restored shared chore ${taskId} to ${c.assigned.length} member(s)`);
+    } catch (e) {
+      console.error(`[habitica-kids] restore ${taskId} failed: ${e.message}`);
+    }
+    delete claims[taskId];
+  }
+  saveClaims();
+}
+
 /* ---------- parent access (short PIN) ---------- */
 
 const parentSessions = new Map(); // token -> expiry
@@ -432,6 +482,15 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req);
       if (body && body.type === "scored" && body.task && body.task.type === "reward" && body.direction === "up") {
         await recordRedemption(body);
+      }
+      // shared household chore completed → make it disappear for the others
+      if (config.exclusiveGroupChores && body && body.type === "scored" && body.direction === "up" &&
+          body.task && body.task.type === "daily" && body.task.group && body.task.group.id) {
+        const uid = body.user && body.user._id;
+        const who = (await getMembers()).find((m) => m.userId === uid);
+        const taskId = body.task.group.taskId || body.task.id || body.task._id;
+        await claimGroupChore(taskId, uid, who ? who.name : uid).catch((e) =>
+          console.error("[habitica-kids] claim failed:", e.message));
       }
       return sendJSON(res, 200, { ok: true });
     }
@@ -582,5 +641,10 @@ server.listen(config.port, () => {
   console.log(`[habitica-kids] listening on :${config.port} → ${config.apiBase}`);
   if (config.webhookUrl) {
     ensureWebhooks().catch((e) => console.error("[habitica-kids] webhook setup:", e.message));
+  }
+  if (config.exclusiveGroupChores) {
+    const tick = () => restoreClaims().catch((e) => console.error("[habitica-kids] restore:", e.message));
+    tick();                       // catch up if we were down over a day boundary
+    setInterval(tick, 10 * 60000); // and check every 10 minutes
   }
 });

@@ -39,6 +39,12 @@ No logins, no account switching, works on any device with a browser.
   emailed, and exposed at `/_hk/redemptions` for other displays. A parent page at
   **`/kids/parent.html`** lists what still has to be handed over — tap *✓ Remis*
   and it clears everywhere.
+- **Shared chores that are first-come, first-served** (`exclusiveGroupChores`).
+  Habitica gives every assignee their own copy of a group task, so several kids
+  can each complete — and each be rewarded for — the same household chore. When
+  one member completes it, this unassigns the others, so it **disappears from
+  their lists**; only the person who did it keeps the XP and gold. It's put back
+  up for grabs at the next day rollover.
 - **Self-host friendly.** Point `apiBase` at your own Habitica instance.
 - **No dependencies.** Node 18+ and the standard library. One file, ~250 lines.
 
@@ -72,6 +78,7 @@ is set, the real Habitica is served from `/` on the same port.
   ],
   "order": ["Kid One", "Kid Two"],             // optional display order
   "hideMembers": [],                           // names/ids to leave off the picker
+  "exclusiveGroupChores": true,                // shared chores: first to finish wins
   "parentPin": "1234",                         // gates the parent page (blank = no gate)
   "parentSessionMinutes": 30,
   "memberCacheSeconds": 300

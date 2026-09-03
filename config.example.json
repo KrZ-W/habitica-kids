@@ -37,5 +37,6 @@
   },
   "parentPin": "1234",
   "parentSessionMinutes": 30,
-  "shortcutToken": "<a-long-random-string>"
+  "shortcutToken": "<a-long-random-string>",
+  "exclusiveGroupChores": true
 }

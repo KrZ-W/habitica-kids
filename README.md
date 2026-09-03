@@ -135,9 +135,28 @@ Wednesdays"*. No dependencies — plain JSON-RPC over stdio.
 
 ### Siri / Apple Shortcuts
 
-Because it's all HTTP underneath, a Shortcut with **Get Contents of URL** against
-this server turns into a voice command (*"Dis Siri, ajouter une tâche"*). Works on
-your LAN; put the server behind a domain + HTTPS to use it away from home.
+`GET|POST /_hk/say?token=…&text=…` takes **one dictated sentence**, works out the
+person, difficulty and repeat days, and replies with a short sentence Siri can
+read back. Set `shortcutToken` in the config to a long random string.
+
+```
+"ajouter une tâche pour Arthur ranger sa chambre difficile le lundi et mercredi"
+   → Ajouté pour Arthur : Ranger sa chambre
+"ajoute pour Félix pratiquer le piano tous les jours"   → daily
+"nouvelle tâche de maison sortir les poubelles"          → shared household chore
+"quelles sont les tâches de Arthur"                      → reads them back
+"enlever pour Arthur ranger sa chambre"                  → deletes it
+```
+
+Understands French and English day names, `en semaine` / `fin de semaine` /
+`tous les jours`, and difficulties (`facile`, `moyen`, `difficile`). Matching is
+whole-word, so names like *Arthur* aren't mistaken for *Thursday*.
+
+Build the Shortcut: **Ask for Input** (text, "Quelle tâche ?") → **URL** →
+**Get Contents of URL** (`…/_hk/say`, POST, JSON body `text` = the input,
+`token` = your token) → **Show Result** / **Speak Text**. Name it *"Ajouter une
+tâche"* and say *"Dis Siri, ajouter une tâche"*. Works on your Wi-Fi; put the
+server behind a domain + HTTPS to use it away from home.
 
 ## Security
 

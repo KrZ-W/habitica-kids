@@ -19,6 +19,8 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const { sendMail } = require("./notify");
+const CH = require("./lib/chores");
+const { parseSentence } = require("./lib/parse");
 
 const CONFIG_PATH = process.env.HK_CONFIG || path.join(__dirname, "config.json");
 const PUBLIC_DIR = path.join(__dirname, "public");
@@ -32,6 +34,7 @@ function loadConfig() {
   cfg.hide = Array.isArray(cfg.hideMembers) ? cfg.hideMembers : [];
   // When set, the real Habitica web app is proxied on this same origin so a
   // member can be logged straight into it (see /open).
+  cfg.shortcutToken = cfg.shortcutToken || "";  // shared secret for Siri Shortcuts
   cfg.parentPin = cfg.parentPin ? String(cfg.parentPin) : "";   // gate the parent page
   cfg.parentSessionMinutes = cfg.parentSessionMinutes || 30;
   cfg.habiticaOrigin = cfg.habiticaOrigin || "";
@@ -444,6 +447,58 @@ const server = http.createServer(async (req, res) => {
         list = list.filter((r) => Date.parse(r.at) >= cut);
       }
       return sendJSON(res, 200, { redemptions: list.slice(0, limit) });
+    }
+    // --- Siri / Shortcuts: one dictated sentence in, plain sentence out ---
+    if (url.pathname === "/_hk/say") {
+      const body = req.method === "POST" ? await readBody(req) : {};
+      const token = body.token || url.searchParams.get("token") ||
+        (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+      if (!config.shortcutToken || token !== config.shortcutToken) {
+        res.writeHead(403, { "content-type": "text/plain; charset=utf-8" });
+        return res.end("Non autorisé");
+      }
+      const said = String(body.text || url.searchParams.get("text") || "").trim();
+      const say = (msg, code = 200) => {
+        res.writeHead(code, { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" });
+        res.end(msg);
+      };
+      if (!said) return say("Je n'ai rien entendu.", 400);
+      try {
+        const chores = CH.loadConfig(CONFIG_PATH);
+        const people = chores.members.map((m) => m.name);
+        const p = parseSentence(said, people);
+
+        if (p.action === "list") {
+          const rows = await CH.listChores(chores, { who: p.who });
+          if (!rows.length) return say(p.who ? `${p.who} n'a aucune tâche.` : "Aucune tâche.");
+          const by = {};
+          rows.forEach((r) => { (by[r.person] = by[r.person] || []).push(r.text); });
+          return say(Object.entries(by).map(([n, t]) => `${n} : ${t.join(", ")}`).join(". "));
+        }
+        if (!p.text) return say("Je n'ai pas compris quelle tâche.", 400);
+
+        if (p.action === "remove") {
+          if (p.house) { const r = await CH.removeHouseChore(chores, { task: p.text }); return say(`Supprimé de la maison : ${r.removed}`); }
+          if (!p.who) return say("Pour qui ? Précise un prénom.", 400);
+          const r = await CH.removeChore(chores, { who: p.who, task: p.text });
+          return say(`Supprimé pour ${r.person} : ${r.removed}`);
+        }
+        // add
+        if (p.house) {
+          const r = await CH.addHouseChore(chores, { text: p.text, difficulty: p.difficulty || "easy", days: p.days });
+          return say(`Tâche de maison ajoutée : ${r.text}`);
+        }
+        if (p.everyone) {
+          const r = await CH.addChoreForAll(chores, { text: p.text, difficulty: p.difficulty || "easy", days: p.days });
+          const ok = r.filter((x) => !x.error).length;
+          return say(`Ajouté pour ${ok} personnes : ${p.text}`);
+        }
+        if (!p.who) return say("Pour qui ? Précise un prénom.", 400);
+        const r = await CH.addChore(chores, { who: p.who, text: p.text, difficulty: p.difficulty || "easy", days: p.days });
+        return say(`Ajouté pour ${r.person} : ${r.text}`);
+      } catch (e) {
+        return say("Désolé : " + e.message, 400);
+      }
     }
     if (url.pathname === "/_hk/parent-check") {
       return sendJSON(res, 200, { ok: isParent(req), pinRequired: !!config.parentPin });

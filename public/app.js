@@ -1,9 +1,9 @@
 /* habitica-kids — front-end. Tokens stay on the server; this only talks to /api/*. */
 (() => {
   const $ = (id) => document.getElementById(id);
-  const peopleScreen = $("people"), choresScreen = $("chores");
-  const grid = $("people-grid"), choreGrid = $("chore-grid");
-  let current = null, refreshTimer = null;
+  const peopleScreen = $("people"), choresScreen = $("chores"), shopScreen = $("shop");
+  const grid = $("people-grid"), choreGrid = $("chore-grid"), shopGrid = $("shop-grid");
+  let current = null, refreshTimer = null, gold = 0;
 
   const avatarEl = (layers, cls = "") => {
     const d = document.createElement("div");
@@ -52,7 +52,7 @@
         grid.appendChild(b);
 
         // second action: jump into the full Habitica app, already logged in as
-        // this member (rewards shop, equipment, pets, drops — the whole game)
+        // this member (equipment, pets, drops — the whole game)
         const full = document.createElement("a");
         full.className = "person-full";
         full.href = "/open?member=" + encodeURIComponent(m.id);
@@ -70,17 +70,23 @@
     $("who-name").textContent = m.name;
     const a = $("who-avatar");
     a.replaceWith(Object.assign(avatarEl(m.avatar, "sm"), { id: "who-avatar" }));
+    const sa = $("shop-avatar");
+    sa.replaceWith(Object.assign(avatarEl(m.avatar, "sm"), { id: "shop-avatar" }));
     peopleScreen.classList.add("hidden");
+    shopScreen.classList.add("hidden");
     choresScreen.classList.remove("hidden");
     loadChores();
+    loadRewards();
     clearInterval(refreshTimer);
-    refreshTimer = setInterval(loadChores, 30000); // keep in sync if done elsewhere
+    refreshTimer = setInterval(() => { loadChores(); loadRewards(); }, 30000); // keep in sync if done elsewhere
   }
 
   function goBack() {
     clearInterval(refreshTimer);
     current = null;
+    closeConfirm();
     choresScreen.classList.add("hidden");
+    shopScreen.classList.add("hidden");
     peopleScreen.classList.remove("hidden");
     loadPeople();
   }
@@ -151,11 +157,122 @@
       const bits = ["Bravo ! 🎉"];
       if (j.drop && j.drop.text) bits.push("Trouvé : " + j.drop.text);
       toast(bits.join("  "));
-      setTimeout(loadChores, 900);
+      setTimeout(() => { loadChores(); loadRewards(); }, 900);
     } catch (e) {
       btn.disabled = false;
       btn.classList.remove("popping");
       toast("Oups, réessaie");
+    }
+  }
+
+  /* ---------- rewards ---------- */
+
+  // Gold is shown on the chores bar; the list is only drawn when the shop is open.
+  async function loadRewards(draw = false) {
+    if (!current) return;
+    try {
+      const r = await fetch("/_hk/rewards?member=" + encodeURIComponent(current.id));
+      const j = await r.json();
+      gold = j.gold || 0;
+      $("gold").textContent = "🪙 " + gold;
+      $("shop-gold").textContent = "🪙 " + gold;
+      if (draw || !shopScreen.classList.contains("hidden")) renderRewards(j.rewards || []);
+    } catch (e) {
+      if (draw) toast("Connexion impossible");
+    }
+  }
+
+  function renderRewards(rewards) {
+    shopGrid.innerHTML = "";
+    $("shop-empty").classList.toggle("hidden", rewards.length > 0);
+    rewards.forEach((rw) => {
+      const b = document.createElement("button");
+      const can = gold >= rw.cost;
+      b.className = "tile reward" + (can ? "" : " locked");
+
+      const ic = document.createElement("span");
+      ic.className = "tile-icon";
+      ic.textContent = rw.icon || "🎁";
+      b.appendChild(ic);
+
+      const tx = document.createElement("span");
+      tx.className = "tile-label";
+      tx.textContent = rw.label;
+      b.appendChild(tx);
+
+      const cost = document.createElement("span");
+      cost.className = "tile-cost";
+      cost.textContent = (can ? "" : "🔒 ") + rw.cost + " 🪙";
+      b.appendChild(cost);
+
+      b.onclick = () => {
+        if (!can) return toast(`Il te manque ${rw.cost - gold} 🪙`);
+        askBuy(rw, b);
+      };
+      shopGrid.appendChild(b);
+    });
+  }
+
+  function openShop() {
+    if (!current) return;
+    choresScreen.classList.add("hidden");
+    shopScreen.classList.remove("hidden");
+    shopGrid.innerHTML = '<p class="muted">Chargement…</p>';
+    loadRewards(true);
+  }
+  $("shop-open").onclick = openShop;
+  $("shop-back").onclick = () => {
+    closeConfirm();
+    shopScreen.classList.add("hidden");
+    choresScreen.classList.remove("hidden");
+    loadChores();
+  };
+
+  // little "are you sure?" so a five-year-old can't burn 40 gold by mis-tapping
+  let pending = null;
+  function askBuy(rw, btn) {
+    pending = { rw, btn };
+    $("confirm-icon").textContent = rw.icon || "🎁";
+    $("confirm-text").textContent = `Échanger ${rw.cost} 🪙 contre « ${rw.label} » ?`;
+    $("confirm").classList.remove("hidden");
+  }
+  function closeConfirm() {
+    pending = null;
+    $("confirm").classList.add("hidden");
+  }
+  $("confirm-no").onclick = closeConfirm;
+  $("confirm").onclick = (e) => { if (e.target === $("confirm")) closeConfirm(); };
+  $("confirm-yes").onclick = () => {
+    const p = pending;
+    closeConfirm();
+    if (p) buy(p.rw, p.btn);
+  };
+
+  async function buy(rw, btn) {
+    btn.disabled = true;
+    btn.classList.add("popping");
+    try {
+      const r = await fetch("/_hk/buy", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ member: current.id, reward: rw.id })
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "erreur");
+      if (j.ok === false) {
+        toast(j.reason === "not_enough_gold" ? "Pas assez de pièces 🪙" : "Oups, réessaie");
+        btn.disabled = false;
+        btn.classList.remove("popping");
+        return;
+      }
+      burst(btn);
+      toast(`${rw.icon || "🎁"} C'est à toi ! Montre-le à un parent.`);
+      setTimeout(() => loadRewards(true), 700);
+    } catch (e) {
+      btn.disabled = false;
+      toast("Oups, réessaie");
+    } finally {
+      btn.classList.remove("popping");
     }
   }
 

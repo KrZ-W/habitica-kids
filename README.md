@@ -27,7 +27,11 @@ No logins, no account switching, works on any device with a browser.
   becomes the tile's pictogram, so kids who can't read yet can still find their
   chores. Big touch targets, ⭐/🪙 burst and a "Bravo !" toast on completion.
 - **Personal + household chores.** Shows a member's due Dailies and To-Dos, plus
-  any **group/party chores** assigned to them (🏠).
+  any **group/party chores** assigned to them (🏠) — dailies *and* one-off to-dos.
+- **A rewards shop kids can use.** 🎁 on the chores bar shows their gold and the
+  rewards a parent set up as big tiles with a price; unaffordable ones are locked,
+  and buying asks *Oui / Non* first so a mis-tap never spends gold. Buying goes
+  through the same webhook as the real app, so it lands on the parent page below.
 - **Launcher into the real app.** Set `habiticaOrigin` and this also reverse-proxies
   your Habitica on the same origin, so a tap can write that member's session and
   open the complete web client as them. Everything the simple view doesn't cover
@@ -40,16 +44,18 @@ No logins, no account switching, works on any device with a browser.
   **`/kids/parent.html`** lists what still has to be handed over — tap *✓ Remis*
   and it clears everywhere.
 - **A parent page for managing chores** — `/kids/manage.html` (behind the same
-  PIN): add a chore for one person, everyone, or the household; pick difficulty
-  and repeat days with taps; list and delete. No Habitica logins, no per-account
-  switching, nothing to install — so a second parent can manage chores from a
-  phone.
+  PIN): add a daily, a one-off to-do or a reward for one person, everyone, or the
+  household; pick difficulty, repeat days or a gold price with taps. Tabs for
+  Dailies / To-dos / Rewards, each with ✏️ edit (rename, difficulty, days, price)
+  and 🗑. No Habitica logins, no per-account switching, nothing to install — so a
+  second parent can manage chores from a phone.
 - **Shared chores that are first-come, first-served** (`exclusiveGroupChores`).
   Habitica gives every assignee their own copy of a group task, so several kids
   can each complete — and each be rewarded for — the same household chore. When
   one member completes it, this unassigns the others, so it **disappears from
-  their lists**; only the person who did it keeps the XP and gold. It's put back
-  up for grabs at the next day rollover.
+  their lists**; only the person who did it keeps the XP and gold. A shared daily
+  is put back up for grabs at the next day rollover; a shared to-do stays done. A
+  10-minute safety net catches any completion the webhook missed.
 - **Automatic day rollover** (`autoRollover`). Habitica only resets a member's
   dailies when a *client* triggers their day rollover (its "cron"); if nobody opens
   the official app, yesterday's checkmarks just stay. This server checks every

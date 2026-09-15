@@ -9,7 +9,7 @@
  *   chores update "Ranger" --who arthur [--text "..."] [--difficulty hard] [--days weekdays]
  *   chores remove "Ranger" --who arthur
  *   chores house list
- *   chores house add "🍽️ Vider le lave-vaisselle" [--days daily] [--assign felix,emile]
+ *   chores house add "🍽️ Vider le lave-vaisselle" [--type daily|todo] [--days daily] [--assign felix,emile]
  *   chores house remove "lave-vaisselle"
  *
  * Output is human-readable by default, or JSON with --json (handy for agents).
@@ -37,7 +37,7 @@ const USAGE = `chores — manage family Habitica chores
   add "TEXT"  --everyone      [--except a,b]  (same options)
   update "TEXT|ID" --who NAME [--text NEW] [--difficulty D] [--days SPEC] [--notes T]
   remove "TEXT|ID" --who NAME
-  house list | house add "TEXT" [--days SPEC] [--assign a,b] | house remove "TEXT"
+  house list | house add "TEXT" [--type daily|todo] [--days SPEC] [--assign a,b] | house remove "TEXT"
 
   --days: mon,wed,fri | weekdays | weekend | daily   (French names work too)
   --json: machine-readable output`;
@@ -97,7 +97,7 @@ const USAGE = `chores — manage family Habitica chores
           return;
         }
         if (sub === "add") {
-          const res = await C.addHouseChore(cfg, { text: rest[1], difficulty: args.difficulty || "easy", days: args.days, assignTo: listSplit(args.assign) });
+          const res = await C.addHouseChore(cfg, { text: rest[1], type: args.type || "daily", difficulty: args.difficulty || "easy", days: args.days, assignTo: listSplit(args.assign) });
           return show(json ? res : `✓ maison: ${res.text} → ${res.assigned.join(", ")}`);
         }
         if (sub === "remove" || sub === "rm") {

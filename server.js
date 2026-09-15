@@ -291,15 +291,20 @@ async function getChores(member) {
     try {
       const g = await api(`/tasks/group/${config.party.id}`, member);
       for (const t of g.data || []) {
-        if (t.type !== "daily" || t.isDue === false) continue;
+        // dailies come back every day; household to-dos are one-shot
+        if (t.type !== "daily" && t.type !== "todo") continue;
+        if (t.type === "daily" && t.isDue === false) continue;
         const grp = t.group || {};
         const detail = grp.assignedUsersDetail || {};
         if (!(grp.assignedUsers || []).includes(member.userId)) continue;
+        const done = !!(detail[member.userId] && detail[member.userId].completed);
+        // a finished to-do is finished — don't leave it sitting on the doer's grid
+        if (t.type === "todo" && done) continue;
         chores.push({
           id: t.id || t._id,
           type: "group",
           ...splitEmoji(t.text),
-          completed: !!(detail[member.userId] && detail[member.userId].completed)
+          completed: done
         });
       }
     } catch (e) { /* group chores are optional */ }
@@ -319,7 +324,7 @@ const partyCred = () => (config.party && config.party.userId && config.party.api
   ? { userId: config.party.userId, apiToken: config.party.apiToken } : null;
 
 // Someone completed a shared chore: take it off everyone else's list.
-async function claimGroupChore(taskId, winnerId, winnerName) {
+async function claimGroupChore(taskId, winnerId, winnerName, kind = "daily") {
   const cred = partyCred();
   if (!cred) return;
   const task = (await api(`/tasks/${taskId}`, cred)).data || {};
@@ -327,8 +332,11 @@ async function claimGroupChore(taskId, winnerId, winnerName) {
   const others = assigned.filter((u) => u !== winnerId);
   if (!others.length) return;
 
-  claims[taskId] = { assigned, by: winnerName || winnerId, day: today() };
-  saveClaims();
+  // Only dailies are put back up for grabs the next day; a to-do stays done.
+  if (kind === "daily") {
+    claims[taskId] = { assigned, by: winnerName || winnerId, day: today() };
+    saveClaims();
+  }
   for (const uid of others) {
     try { await api(`/tasks/${taskId}/unassign/${uid}`, cred, { method: "POST" }); }
     catch (e) { console.error(`[habitica-kids] unassign ${uid} failed: ${e.message}`); }
@@ -352,6 +360,26 @@ async function restoreClaims() {
     delete claims[taskId];
   }
   saveClaims();
+}
+
+// The webhook is the fast path; this is the safety net. Any household to-do that
+// somebody has already finished comes off everyone else's list on the next tick.
+// To-dos only: dailies reset every day and are handled by the claim/restore pair.
+async function reconcileGroupTodos() {
+  const cred = partyCred();
+  if (!cred || !(config.party && config.party.id)) return;
+  const g = await api(`/tasks/group/${config.party.id}`, cred);
+  for (const t of g.data || []) {
+    if (t.type !== "todo") continue;
+    const grp = t.group || {};
+    const detail = grp.assignedUsersDetail || {};
+    const assigned = grp.assignedUsers || [];
+    if (assigned.length < 2) continue;
+    const winner = assigned.find((u) => detail[u] && detail[u].completed);
+    if (!winner) continue;
+    const who = (await getMembers()).find((m) => m.userId === winner);
+    await claimGroupChore(t.id || t._id, winner, who ? who.name : winner, "todo");
+  }
 }
 
 /* ---------- daily rollover (Habitica "cron") ---------- */
@@ -512,11 +540,12 @@ const server = http.createServer(async (req, res) => {
       }
       // shared household chore completed → make it disappear for the others
       if (config.exclusiveGroupChores && body && body.type === "scored" && body.direction === "up" &&
-          body.task && body.task.type === "daily" && body.task.group && body.task.group.id) {
+          body.task && (body.task.type === "daily" || body.task.type === "todo") &&
+          body.task.group && body.task.group.id) {
         const uid = body.user && body.user._id;
         const who = (await getMembers()).find((m) => m.userId === uid);
         const taskId = body.task.group.taskId || body.task.id || body.task._id;
-        await claimGroupChore(taskId, uid, who ? who.name : uid).catch((e) =>
+        await claimGroupChore(taskId, uid, who ? who.name : uid, body.task.type).catch((e) =>
           console.error("[habitica-kids] claim failed:", e.message));
       }
       return sendJSON(res, 200, { ok: true });
@@ -605,7 +634,7 @@ const server = http.createServer(async (req, res) => {
           return sendJSON(res, 200, { chores: personal, house });
         }
         if (op === "add" && req.method === "POST") {
-          if (body.house) return sendJSON(res, 200, await CH.addHouseChore(chores, { text: body.text, difficulty: body.difficulty, days: body.days, assignTo: body.assignTo }));
+          if (body.house) return sendJSON(res, 200, await CH.addHouseChore(chores, { text: body.text, difficulty: body.difficulty, days: body.days, assignTo: body.assignTo, type: body.type }));
           if (body.everyone) return sendJSON(res, 200, { added: await CH.addChoreForAll(chores, body) });
           return sendJSON(res, 200, await CH.addChore(chores, body));
         }
@@ -660,7 +689,7 @@ const server = http.createServer(async (req, res) => {
         await api(`/tasks/${body.reward}/score/up`, m, { method: "POST" });
       } catch (e) {
         // Habitica refuses when there isn't enough gold
-        if (/gold|or\b|afford|assez/i.test(e.message)) return sendJSON(res, 200, { ok: false, reason: "not_enough_gold" });
+        if (/not enough gold|pas assez d.or/i.test(e.message)) return sendJSON(res, 200, { ok: false, reason: "not_enough_gold" });
         throw e;
       }
       const after = await getRewards(m);
@@ -708,6 +737,7 @@ server.listen(config.port, () => {
     // order matters: roll days over first, then put shared chores back up
     if (config.autoRollover) await rolloverDays().catch((e) => console.error("[habitica-kids] rollover:", e.message));
     if (config.exclusiveGroupChores) await restoreClaims().catch((e) => console.error("[habitica-kids] restore:", e.message));
+    if (config.exclusiveGroupChores) await reconcileGroupTodos().catch((e) => console.error("[habitica-kids] reconcile:", e.message));
   };
   tick();                        // catch up if we were down over a day boundary
   setInterval(tick, 10 * 60000); // and check every 10 minutes

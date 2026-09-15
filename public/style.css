@@ -131,3 +131,42 @@ h1 { font-size: 30px; text-align: center; margin: 10px 0 26px; font-weight: 700;
   padding: 8px 10px; border-radius: 999px;
 }
 #parent-link:active { opacity: 1; background: rgba(255,255,255,.08); }
+
+/* --- rewards shop --- */
+.shop-btn {
+  background: var(--bg2); color: var(--fg); border: 2px solid rgba(255,204,102,.35);
+  border-radius: 14px; height: 52px; padding: 0 12px; font-size: 24px;
+  display: flex; align-items: center; gap: 8px; cursor: pointer; flex: 0 0 auto;
+}
+.shop-btn:active { transform: scale(.94); border-color: var(--accent); }
+.gold { font-size: 17px; font-weight: 700; color: var(--accent); white-space: nowrap; }
+.gold.big { font-size: 22px; }
+
+.tile.reward .tile-cost {
+  font-size: 16px; font-weight: 700; color: var(--accent);
+  background: rgba(255,204,102,.12); border-radius: 999px; padding: 4px 12px;
+}
+.tile.reward.locked { opacity: .5; }
+.tile.reward.locked .tile-cost { color: var(--muted); background: rgba(147,161,184,.12); }
+
+/* --- confirm dialog --- */
+.overlay {
+  position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 40;
+  background: rgba(10,14,22,.72);
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.dialog {
+  background: var(--bg2); border-radius: 26px; padding: 26px 22px 20px;
+  max-width: 420px; width: 100%; text-align: center;
+  box-shadow: 0 18px 50px rgba(0,0,0,.5);
+}
+.dialog-icon { font-size: 64px; line-height: 1; display: block; }
+.dialog-text { font-size: 21px; line-height: 1.35; margin: 14px 0 22px; }
+.dialog-actions { display: flex; gap: 14px; }
+.btn {
+  flex: 1 1 0; border: none; border-radius: 18px; padding: 16px 10px;
+  font: inherit; font-size: 20px; font-weight: 700; cursor: pointer;
+}
+.btn.no { background: rgba(255,255,255,.10); color: var(--fg); }
+.btn.yes { background: var(--accent); color: #2a2008; }
+.btn:active { transform: scale(.96); }

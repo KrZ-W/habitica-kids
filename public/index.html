@@ -7,7 +7,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#141c2b">
 <title>Mes tâches</title>
-<link rel="stylesheet" href="/kids/style.css">
+<link rel="stylesheet" href="/kids/style.css?v=3">
 </head>
 <body>
 
@@ -23,15 +23,39 @@
     <button id="back" class="back" aria-label="Retour">←</button>
     <div class="who"><span id="who-avatar" class="avatar sm"></span><h2 id="who-name"></h2></div>
     <div id="progress" class="progress"></div>
+    <button id="shop-open" class="shop-btn" aria-label="Récompenses">🎁<span id="gold" class="gold">🪙 0</span></button>
   </header>
   <div id="chore-grid" class="chore-grid"></div>
   <p id="all-done" class="all-done hidden">Tout est fait&nbsp;! 🎉</p>
 </section>
 
+<!-- what that person can buy with their gold -->
+<section id="shop" class="screen hidden">
+  <header class="bar">
+    <button id="shop-back" class="back" aria-label="Retour">←</button>
+    <div class="who"><span id="shop-avatar" class="avatar sm"></span><h2>Récompenses</h2></div>
+    <div id="shop-gold" class="gold big">🪙 0</div>
+  </header>
+  <div id="shop-grid" class="chore-grid"></div>
+  <p id="shop-empty" class="all-done hidden">Aucune récompense&nbsp;: demande à un parent. 🎁</p>
+</section>
+
+<!-- "are you sure?" so a mis-tap never spends gold -->
+<div id="confirm" class="overlay hidden">
+  <div class="dialog">
+    <span id="confirm-icon" class="dialog-icon"></span>
+    <p id="confirm-text" class="dialog-text"></p>
+    <div class="dialog-actions">
+      <button id="confirm-no" class="btn no">Non</button>
+      <button id="confirm-yes" class="btn yes">Oui&nbsp;!</button>
+    </div>
+  </div>
+</div>
+
 <a id="parent-link" href="/kids/parent.html" title="Parents">⚙️</a>
 
 <div id="toast" class="toast hidden"></div>
 
-<script src="/kids/app.js"></script>
+<script src="/kids/app.js?v=3"></script>
 </body>
 </html>

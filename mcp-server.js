@@ -94,6 +94,7 @@ const TOOLS = [
       type: "object",
       properties: {
         text: { type: "string", description: "The chore, ideally starting with an emoji." },
+        type: { type: "string", enum: ["daily", "todo"], description: "daily = comes back every day (default); todo = one-off, gone once anyone does it." },
         difficulty: DIFF,
         days: { type: "string", description: DAYS_DESC },
         assignTo: { type: "array", items: { type: "string" }, description: `Who can do it (${PEOPLE.join(", ")}). Default: everyone.` }
